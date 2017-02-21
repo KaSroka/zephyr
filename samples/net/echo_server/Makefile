@@ -16,3 +16,13 @@ ifeq ($(CONFIG_NET_L2_BT), y)
 else
 	include $(ZEPHYR_BASE)/samples/net/common/Makefile.ipstack
 endif
+
+ccflags-$(CONFIG_NET_L2_OPENTHREAD) += -I$(O)/openthread/include
+
+export LIB_INCLUDE_DIR += -L$(O)/openthread/lib
+export ALL_LIBS += openthread-cli-ftd openthread-ftd openthread-platform-utils mbedcrypto
+
+all: lib-openthread
+
+lib-openthread: outputexports
+	$(MAKE) -f ../../../ext/lib/openthread/Makefile.library O=$(O)

@@ -431,6 +431,10 @@ static inline u16_t calc_chksum_pkt(u16_t sum, struct net_pkt *pkt,
 			break;
 		}
 
+		if (!frag->len) {
+			break;
+		}
+
 		ptr = frag->data;
 
 		/* Do we need to take first byte from next fragment */

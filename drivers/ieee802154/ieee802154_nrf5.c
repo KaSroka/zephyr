@@ -96,7 +96,7 @@ static void nrf5_rx_thread(void *arg1, void *arg2, void *arg3)
 		 * The last 2 bytes contain LQI or FCS, depending if
 		 * automatic CRC handling is enabled or not, respectively.
 		 */
-#if defined(CONFIG_IEEE802154_NRF5_RAW)
+#if defined(CONFIG_IEEE802154_NRF5_RAW) || defined(CONFIG_NET_L2_OPENTHREAD)
 		pkt_len = nrf5_radio->rx_psdu[0];
 #else
 		pkt_len = nrf5_radio->rx_psdu[0] -  NRF5_FCS_LENGTH;
@@ -212,7 +212,7 @@ static int nrf5_set_ieee_addr(struct device *dev, const u8_t *ieee_addr)
 
 	SYS_LOG_DBG("IEEE address %02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x",
 		    ieee_addr[7], ieee_addr[6], ieee_addr[5], ieee_addr[4],
-		    ieee_addr[3], ieee_addr[2], ieee_addr[1], ieee_addr[0]);
+			ieee_addr[3], ieee_addr[2], ieee_addr[1], ieee_addr[0]);
 
 	nrf_drv_radio802154_extended_address_set(ieee_addr);
 
@@ -242,6 +242,9 @@ static int nrf5_tx(struct device *dev,
 	nrf5_radio->tx_success = false;
 	nrf5_radio->tx_psdu[0] = payload_len + NRF5_FCS_LENGTH;
 
+	// Reset semaphore in case ACK was received after timeout
+	k_sem_take(&nrf5_radio->tx_wait, K_NO_WAIT);
+
 	memcpy(nrf5_radio->tx_psdu + 1, payload, payload_len);
 
 	if (!nrf_drv_radio802154_transmit(nrf5_radio->tx_psdu,
@@ -255,16 +258,15 @@ static int nrf5_tx(struct device *dev,
 		    nrf5_radio->channel,
 		    nrf5_radio->txpower);
 
-	/* The nRF driver guarantees that either
-	 * nrf_drv_radio802154_transmitted() or
-	 * nrf_drv_radio802154_energy_detected()
-	 * callback is called, thus unlocking the semaphore.
-	 */
-	k_sem_take(&nrf5_radio->tx_wait, K_FOREVER);
-
-	SYS_LOG_DBG("Result: %d", nrf5_data.tx_success);
-
-	return nrf5_radio->tx_success ? 0 : -EBUSY;
+	if(k_sem_take(&nrf5_radio->tx_wait, K_MSEC(7)) == 0) {
+		SYS_LOG_DBG("Result: %d", nrf5_data.tx_success);
+		
+		return nrf5_radio->tx_success ? 0 : -EBUSY;
+	} else {
+		SYS_LOG_INF("ACK not received");
+		nrf_drv_radio802154_receive(nrf5_radio->channel, true);
+		return -EIO;
+	}
 }
 
 static int nrf5_start(struct device *dev)
@@ -369,7 +371,6 @@ void nrf_drv_radio802154_received(u8_t *p_data, s8_t power, s8_t lqi)
 	nrf5_data.rx_psdu = p_data;
 	nrf5_data.rssi = power;
 	nrf5_data.lqi = lqi;
-
 	k_sem_give(&nrf5_data.rx_wait);
 }
 
@@ -416,7 +417,19 @@ static struct ieee802154_radio_api nrf5_radio_api = {
 DEVICE_AND_API_INIT(nrf5_154_radio, CONFIG_IEEE802154_NRF5_DRV_NAME,
 		    nrf5_init, &nrf5_data, &nrf5_radio_cfg,
 		    POST_KERNEL, CONFIG_IEEE802154_NRF5_INIT_PRIO,
-		    &nrf5_radio_api);
+			&nrf5_radio_api);
+#elif defined(CONFIG_NET_L2_OPENTHREAD)
+NET_DEVICE_INIT(nrf5_154_radio, CONFIG_IEEE802154_NRF5_DRV_NAME,
+		nrf5_init, &nrf5_data, &nrf5_radio_cfg,
+		CONFIG_IEEE802154_NRF5_INIT_PRIO,
+		&nrf5_radio_api, OPENTHREAD_L2,
+		NET_L2_GET_CTX_TYPE(OPENTHREAD_L2), 125);
+
+NET_STACK_INFO_ADDR(RX, nrf5_154_radio,
+			CONFIG_IEEE802154_NRF5_RX_STACK_SIZE,
+			CONFIG_IEEE802154_NRF5_RX_STACK_SIZE,
+			((struct nrf5_802154_data *)
+			(&__device_nrf5_154_radio))->rx_stack, 0);
 #else
 NET_DEVICE_INIT(nrf5_154_radio, CONFIG_IEEE802154_NRF5_DRV_NAME,
 		nrf5_init, &nrf5_data, &nrf5_radio_cfg,

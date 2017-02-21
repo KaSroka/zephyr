@@ -7,3 +7,14 @@
  */
 
 #include <arch/arm/cortex_m/scripts/linker.ld>
+
+ SECTIONS
+ {
+    top_of_image_ram (NOLOAD):
+    {
+        __top_of_image_ram_start__ = .;
+        *(.top_of_image_ram)
+        *(".top_of_image_ram.*")
+        __top_of_image_ram_end__ = .;
+    } > SRAM
+ };

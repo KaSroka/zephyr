@@ -5,3 +5,5 @@ obj-$(CONFIG_IEEE802154_MCR20A) += ieee802154_mcr20a.o
 obj-$(CONFIG_IEEE802154_MCR20A_RAW) += ieee802154_mcr20a.o
 obj-$(CONFIG_IEEE802154_NRF5) += ieee802154_nrf5.o
 obj-$(CONFIG_IEEE802154_NRF5_RAW) += ieee802154_nrf5.o
+
+ccflags-$(CONFIG_NET_L2_OPENTHREAD) += -I$(O)/openthread/include

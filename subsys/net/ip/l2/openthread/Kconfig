@@ -1,0 +1,137 @@
+# Kconfig - OpenThread driver configuration options
+
+#
+# Copyright (c) 2016 Intel Corporation
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions are met:
+#
+# 1) Redistributions of source code must retain the above copyright notice,
+# this list of conditions and the following disclaimer.
+#
+# 2) Redistributions in binary form must reproduce the above copyright notice,
+# this list of conditions and the following disclaimer in the documentation
+# and/or other materials provided with the distribution.
+#
+# 3) Neither the name of Intel Corporation nor the names of its contributors
+# may be used to endorse or promote products derived from this software without
+# specific prior written permission.
+#
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+# AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+# ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+# LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+# CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+# SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+# INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+# CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+# ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+# POSSIBILITY OF SUCH DAMAGE.
+#
+
+#
+# OpenThread options
+#
+menuconfig NET_L2_OPENTHREAD
+	bool
+	prompt "OpenThread L2"
+	select OPENTHREAD_PLAT
+
+if NET_L2_OPENTHREAD
+
+menuconfig OPENTHREAD_L2_DEBUG
+	bool
+	default n
+	prompt "OpenThread L2 log support"
+	help
+		This option enables log support for OpenThread
+
+if OPENTHREAD_L2_DEBUG
+choice
+	prompt "OpenThread L2 log level"
+	depends on OPENTHREAD_L2_DEBUG
+	help
+	  This option selects log level for OpenThread driver.
+
+	config OPENTHREAD_L2_LOG_LEVEL_ERROR
+		bool "Error"
+	config OPENTHREAD_L2_LOG_LEVEL_WARNING
+		bool "Warning"
+	config OPENTHREAD_L2_LOG_LEVEL_INFO
+		bool "Info"
+	config OPENTHREAD_L2_LOG_LEVEL_DEBUG
+		bool "Debug"
+endchoice
+
+config OPENTHREAD_L2_DEBUG_DUMP_15_4
+	bool
+	default n
+	prompt "Dump 802.15.4 packets"
+	help
+		This option enables dumping of 802.15.4 packets
+
+config OPENTHREAD_L2_DEBUG_DUMP_IPV6
+	bool
+	default n
+	prompt "Dump IPv6 packets"
+	help
+		This option enables dumping of IPv6 packets	
+
+endif
+
+config OPENTHREAD_PKT_LIST_SIZE
+	int
+	prompt "List size for Ip6 packet buffering"
+	default 10
+
+config	OPENTHREAD_NAME
+	string "OpenThread Driver name"
+	default "openthread"
+	help
+	  This option sets the driver name
+
+config	OPENTHREAD_L2_LOG_LEVEL
+	int 
+	default 0
+	default 1 if OPENTHREAD_L2_LOG_LEVEL_ERROR
+	default 2 if OPENTHREAD_L2_LOG_LEVEL_WARNING
+	default 3 if OPENTHREAD_L2_LOG_LEVEL_INFO
+	default 4 if OPENTHREAD_L2_LOG_LEVEL_DEBUG	  
+	
+config OPENTHREAD_PANID
+	int
+	prompt "Default PAN ID"
+	default 43981
+	
+config OPENTHREAD_CHANNEL
+	int
+	prompt "Default Channel"
+	default 11
+
+config OPENTHREAD_COAP
+	bool
+	prompt "Built-in CoAP implementation"
+	default n
+		
+config OPENTHREAD_CLI
+	bool
+	prompt "Command Line Interface (CLI) support"
+	default y
+	
+config OPENTHREAD_FTD
+	bool
+	prompt "Full Thread Device (FTD) functions"
+	default y
+
+config OPENTHREAD_DIAG
+	bool
+	prompt "Diagnostic functions support"
+	default n
+	
+config OPENTHREAD_PLATFORM_FLASH_DEVICE_NAME
+	string
+	prompt "Flash device name"
+	default "NRF5_FLASH"
+
+endif

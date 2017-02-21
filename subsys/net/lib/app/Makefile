@@ -21,3 +21,5 @@ ifeq ($(CONFIG_NET_APP_SETTINGS),y)
 endif
 
 ccflags-$(CONFIG_NEWLIB_LIBC) += -D__LINUX_ERRNO_EXTENSIONS__
+
+ccflags-$(CONFIG_NET_L2_OPENTHREAD) += -I$(O)/openthread/include

@@ -29,3 +29,5 @@ else
 		obj-$(CONFIG_NET_TCP) += connection.o
 	endif
 endif
+
+ccflags-$(CONFIG_NET_L2_OPENTHREAD) += -I$(O)/openthread/include
