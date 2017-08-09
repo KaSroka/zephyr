@@ -35,6 +35,7 @@ BuildJobs                      ?= 99
 configure_OPTIONS               = \
     --disable-docs                \
     --with-platform-info=zephyr   \
+    --enable-cli-app=all          \
     $(NULL)
 
 ifeq ($(CONFIG_OPENTHREAD_COAP),y)
@@ -42,7 +43,7 @@ configure_OPTIONS              += --enable-application-coap
 endif
 
 ifeq ($(CONFIG_OPENTHREAD_CLI),y)
-configure_OPTIONS              += --enable-cli                 
+configure_OPTIONS              += --enable-cli-app=all                 
 endif
 
 ifeq ($(CONFIG_OPENTHREAD_DIAG),y)

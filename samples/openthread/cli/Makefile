@@ -4,7 +4,7 @@ CONF_FILE = prj.conf
 include $(ZEPHYR_BASE)/Makefile.inc
 
 export LIB_INCLUDE_DIR += -L$(O)/openthread/lib
-export ALL_LIBS += openthread-cli openthread-ftd openthread-platform-utils mbedcrypto
+export ALL_LIBS += openthread-cli-ftd openthread-ftd openthread-platform-utils mbedcrypto
 
 all: lib-openthread
 

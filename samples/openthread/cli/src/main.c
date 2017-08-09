@@ -64,7 +64,7 @@ static otInstance * initialize_thread(void)
 {
     otInstance *p_instance;
 
-    p_instance = otInstanceInit();
+    p_instance = otInstanceInitSingle();
     assert(p_instance);
 
     otCliUartInit(p_instance);

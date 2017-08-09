@@ -42,5 +42,5 @@ void otPlatReset(otInstance *aInstance)
 otPlatResetReason otPlatGetResetReason(otInstance *aInstance)
 {
     (void)aInstance;
-    return kPlatResetReason_PowerOn;
+    return OT_PLAT_RESET_REASON_POWER_ON;
 }

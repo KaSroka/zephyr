@@ -47,14 +47,14 @@ static inline uint32_t mapAddress(uint32_t aAddress)
 	return aAddress + FLASH_START_ADDR;
 }
 
-ThreadError utilsFlashInit(void)
+otError utilsFlashInit(void)
 {
-	ThreadError error = kThreadError_None;
+	otError error = OT_ERROR_NONE;
 	flash_dev = device_get_binding(
 			CONFIG_OPENTHREAD_PLATFORM_FLASH_DEVICE_NAME);
 
 	if (!flash_dev) {
-		error = kThreadError_NotImplemented;
+		error = OT_ERROR_NOT_IMPLEMENTED;
 	}
 
 	return error;
@@ -65,21 +65,21 @@ uint32_t utilsFlashGetSize(void)
 	return FLASH_SIZE;
 }
 
-ThreadError utilsFlashErasePage(uint32_t aAddress)
+otError utilsFlashErasePage(uint32_t aAddress)
 {
-	ThreadError error = kThreadError_None;
+	otError error = OT_ERROR_NONE;
 
 	if (flash_erase(flash_dev, mapAddress(aAddress), FLASH_PAGE_SIZE)) {
-		error = kThreadError_Error;
+		error = OT_ERROR_FAILED;
 	}
 
 	return error;
 }
 
-ThreadError utilsFlashStatusWait(uint32_t aTimeout)
+otError utilsFlashStatusWait(uint32_t aTimeout)
 {
 	(void) aTimeout;
-	return kThreadError_None;
+	return OT_ERROR_NONE;
 }
 
 uint32_t utilsFlashWrite(uint32_t aAddress, uint8_t *aData, uint32_t aSize)

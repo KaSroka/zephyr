@@ -27,35 +27,68 @@
  */
 
 #include <kernel.h>
+#include <string.h>
 
-#include <openthread/platform/alarm.h>
+#include <openthread/platform/alarm-micro.h>
+#include <openthread/platform/alarm-milli.h>
 #include "platform-zephyr.h"
 
-static bool isAlarmActive;
-static uint32_t tAlarm;
+typedef enum
+{
+    kMsTimer,
+    kUsTimer,
+    kNumTimers
+} AlarmIndex;
+
+typedef struct
+{
+    volatile bool mFireAlarm;   ///< Information for processing function, that alarm should fire.
+    uint32_t      mTargetTime;  ///< Alarm fire time (in millisecond for MsTimer, in microsecond for UsTimer)
+} AlarmData;
+
+static AlarmData sTimerData[kNumTimers];
 
 void platformAlarmInit(void)
 {
-	isAlarmActive = false;
+	memset(sTimerData, 0, sizeof(sTimerData));
 }
 
-uint32_t otPlatAlarmGetNow(void)
+uint32_t otPlatAlarmMilliGetNow(void)
 {
 	return k_uptime_get_32();
 }
 
-void otPlatAlarmStartAt(otInstance *aInstance, uint32_t t0, uint32_t dt)
+uint32_t otPlatAlarmMicroGetNow(void)
+{
+	return k_uptime_get_32() * 1000;
+}
+
+void otPlatAlarmMilliStartAt(otInstance *aInstance, uint32_t t0, uint32_t dt)
 {
     (void)aInstance;
 
-    tAlarm = t0 + dt;
-    isAlarmActive = true;
+	sTimerData[kMsTimer].mTargetTime = t0 + dt;
+    sTimerData[kMsTimer].mFireAlarm  = true;
 }
 
-void otPlatAlarmStop(otInstance *aInstance)
+void otPlatAlarmMicroStartAt(otInstance *aInstance, uint32_t t0, uint32_t dt)
+{
+    (void)aInstance;
+
+	sTimerData[kUsTimer].mTargetTime = (t0 + dt) / 1000;
+    sTimerData[kUsTimer].mFireAlarm  = true;
+}
+
+void otPlatAlarmMilliStop(otInstance *aInstance)
 {
 	(void)aInstance;
-	isAlarmActive = false;
+	sTimerData[kMsTimer].mFireAlarm = false;
+}
+
+void otPlatAlarmMicroStop(otInstance *aInstance)
+{
+	(void)aInstance;
+	sTimerData[kUsTimer].mFireAlarm = false;
 }
 
 void platformAlarmProcess(otInstance *aInstance)
@@ -64,8 +97,13 @@ void platformAlarmProcess(otInstance *aInstance)
 	//      the device to properly sleep. Possibly could be replaced with
 	//      a timer.
 
-	if (isAlarmActive && (k_uptime_get_32() >= tAlarm)) {
-		isAlarmActive = false;
-		otPlatAlarmFired(aInstance);
+	if (sTimerData[kMsTimer].mFireAlarm && (k_uptime_get_32() >= sTimerData[kMsTimer].mTargetTime)) {
+		sTimerData[kMsTimer].mFireAlarm = false;
+		otPlatAlarmMilliFired(aInstance);
+	}
+
+	if (sTimerData[kUsTimer].mFireAlarm && (k_uptime_get_32() >= sTimerData[kUsTimer].mTargetTime)) {
+		sTimerData[kUsTimer].mFireAlarm = false;
+		otPlatAlarmMicroFired(aInstance);
 	}
 }

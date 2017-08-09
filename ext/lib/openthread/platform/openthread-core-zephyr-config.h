@@ -107,4 +107,12 @@
  */
 #define SETTINGS_CONFIG_PAGE_NUM                                4
 
+/**
+ * @def OPENTHREAD_CONFIG_ENABLE_PLATFORM_USEC_TIMER
+ *
+ * Define to 1 if you want to enable microsecond backoff timer implemented in platform.
+ *
+ */
+#define OPENTHREAD_CONFIG_ENABLE_PLATFORM_USEC_TIMER    	1
+
 #endif  // OPENTHREAD_CORE_NRF52840_CONFIG_H_

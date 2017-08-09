@@ -55,16 +55,16 @@ void otPlatLog(otLogLevel aLogLevel, otLogRegion aLogRegion, const char *aFormat
 
 	switch (aLogLevel)
 	{
-	case kLogLevelCrit:
+	case OT_LOG_LEVEL_CRIT:
 		SYS_LOG_ERR("%s", logString);
 		break;
-	case kLogLevelWarn:
+	case OT_LOG_LEVEL_WARN:
 		SYS_LOG_WRN("%s", logString);
 		break;
-	case kLogLevelInfo:
+	case OT_LOG_LEVEL_INFO:
 		SYS_LOG_INF("%s", logString);
 		break;
-	case kLogLevelDebg:
+	case OT_LOG_LEVEL_DEBG:
 		SYS_LOG_DBG("%s", logString);
 		break;
 	default:

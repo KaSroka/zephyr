@@ -45,9 +45,9 @@ uint32_t otPlatRandomGet(void)
 	return sys_rand32_get();
 }
 
-ThreadError otPlatRandomSecureGet(uint16_t aInputLength, uint8_t *aOutput, uint16_t *aOutputLength)
+otError otPlatRandomSecureGet(uint16_t aInputLength, uint8_t *aOutput, uint16_t *aOutputLength)
 {
-    ThreadError error = kThreadError_None;
+    otError error = OT_ERROR_NONE;
     (void)aOutput;
     *aOutputLength = aInputLength;
     return error;

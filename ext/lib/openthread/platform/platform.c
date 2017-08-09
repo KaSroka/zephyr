@@ -42,7 +42,6 @@
 
 #include <openthread/openthread.h>
 #include <openthread/tasklet.h>
-#include <openthread/platform/alarm.h>
 #include <openthread/platform/uart.h>
 
 void PlatformInit(int argc, char *argv[])

@@ -118,25 +118,25 @@ void platformUartInit(void)
 	uart_irq_callback_set(uart_dev, irq_handler);
 }
 
-ThreadError otPlatUartEnable(void)
+otError otPlatUartEnable(void)
 {
 	uart_irq_rx_enable(uart_dev);
 
-	return kThreadError_None;
+	return OT_ERROR_NONE;
 }
 
-ThreadError otPlatUartDisable(void)
+otError otPlatUartDisable(void)
 {
 	uart_irq_rx_disable(uart_dev);
 
-	return kThreadError_None;
+	return OT_ERROR_NONE;
 }
 
-ThreadError otPlatUartSend(const uint8_t *aBuf, uint16_t aBufLength)
+otError otPlatUartSend(const uint8_t *aBuf, uint16_t aBufLength)
 {
-	ThreadError error = kThreadError_None;
+	otError error = OT_ERROR_NONE;
 	if (sTransmitBuffer != NULL) {
-		return kThreadError_Busy;
+		return OT_ERROR_BUSY;
 	}
 
 	while (aBufLength-- > 0) {
