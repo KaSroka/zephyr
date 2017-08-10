@@ -45,7 +45,7 @@
 #include <kernel.h>
 #include <device.h>
 #include <net/ieee802154_radio.h>
-#include <net/nbuf.h>
+#include <net/net_pkt.h>
 
 #include <openthread/platform/radio.h>
 #include <openthread/platform/diag.h>
@@ -59,7 +59,7 @@ static otRadioState sState = OT_RADIO_STATE_DISABLED;
 static otRadioFrame sTransmitFrame;
 static bool         sTransmitPendingBit;
 
-static struct net_buf *tx_pkt;
+static struct net_pkt *tx_pkt;
 static struct net_buf *tx_payload;
 
 static struct device *radio_dev;
@@ -68,13 +68,13 @@ static struct k_fifo rx_queue;
 
 static void dataInit(void)
 {
-	tx_pkt = net_nbuf_get_reserve_tx(0, K_NO_WAIT);
+	tx_pkt = net_pkt_get_reserve_tx(0, K_NO_WAIT);
 	assert(tx_pkt != NULL);
 
-	tx_payload = net_nbuf_get_reserve_tx_data(0, K_NO_WAIT);
+	tx_payload = net_pkt_get_reserve_tx_data(0, K_NO_WAIT);
 	assert(tx_payload != NULL);
 
-	net_buf_frag_insert(tx_pkt, tx_payload);
+	net_pkt_frag_insert(tx_pkt, tx_payload);
 
 	//TODO: No API to get pending bit.
 	sTransmitPendingBit = false;
@@ -87,20 +87,20 @@ void ieee802154_init(struct net_if *iface)
 	SYS_LOG_DBG("");
 }
 
-int net_recv_data(struct net_if *iface, struct net_buf *pkt)
+int net_recv_data(struct net_if *iface, struct net_pkt *pkt)
 {
 	(void)iface;
 
-	SYS_LOG_DBG("Got data, buf %p, len %d frags->len %d",
-		    pkt, pkt->len, net_buf_frags_len(pkt));
+	SYS_LOG_DBG("Got data, pkt %p, len %d frags->len %d",
+		    pkt, pkt->len, net_pkt_frags_len(pkt));
 
-	net_buf_put(&rx_queue, pkt);
+	k_fifo_put(&rx_queue, pkt);
 
 	return 0;
 }
 
 extern enum net_verdict ieee802154_radio_handle_ack(struct net_if *iface,
-						    struct net_buf *buf)
+						    struct net_pkt *buf)
 {
 	(void)iface;
 	(void)buf;
@@ -109,7 +109,7 @@ extern enum net_verdict ieee802154_radio_handle_ack(struct net_if *iface,
 	return NET_CONTINUE;
 }
 
-int ieee802154_radio_send(struct net_if *iface, struct net_buf *buf)
+int ieee802154_radio_send(struct net_if *iface, struct net_pkt *buf)
 {
 	(void)iface;
 	(void)buf;
@@ -132,16 +132,16 @@ void platformRadioInit(void)
 }
 
 void platformRadioProcess(otInstance *aInstance) {
-	struct net_buf *pkt;
+	struct net_pkt *pkt;
 
-	while ((pkt = net_buf_get(&rx_queue, K_NO_WAIT)) != NULL)
+	while ((pkt = k_fifo_get(&rx_queue, K_NO_WAIT)) != NULL)
 	{
 		otRadioFrame recv_frame;
-		recv_frame.mPsdu = net_buf_frag_last(pkt)->data;
-		recv_frame.mLength = net_buf_frags_len(pkt); // Length inc. CRC.
+        recv_frame.mPsdu = net_buf_frag_last(pkt->frags)->data;
+		recv_frame.mLength = net_buf_frags_len(pkt->frags); // Length inc. CRC.
 		recv_frame.mChannel = 11; // TODO: get channel from packet
 		recv_frame.mLqi = 0; // TODO: get LQI from the buffer
-		recv_frame.mPower = 0; // TODO: get RSSI from packet
+		recv_frame.mPower = pkt->ieee802154_rssi; // TODO: get RSSI from packet
 
 #if OPENTHREAD_ENABLE_DIAG
 		if (otPlatDiagModeGet())
@@ -155,7 +155,7 @@ void platformRadioProcess(otInstance *aInstance) {
 					OT_ERROR_NONE);
 		}
 
-		net_buf_unref(pkt);
+		net_pkt_unref(pkt);
 	}
 
 	if (sState == OT_RADIO_STATE_TRANSMIT)
@@ -185,6 +185,7 @@ void platformRadioProcess(otInstance *aInstance) {
 		else
 #endif
 		{
+            // TODO: Get real ACK frame instead of making a spoofed one
             otRadioFrame ackFrame;
             uint8_t ackPsdu[] = {0x05, 0x02, 0x00, 0x00, 0x00, 0x00};
             ackPsdu[3] = sTransmitFrame.mPsdu[3];
