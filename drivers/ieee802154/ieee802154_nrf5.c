@@ -118,7 +118,7 @@ static void nrf5_rx_thread(void *arg1, void *arg2, void *arg3)
 		SYS_LOG_DBG("Caught a packet (%u) (LQI: %u)",
 			    pkt_len, nrf5_radio->lqi);
 
-		if (net_recv_data(nrf5_radio->iface, pkt) < 0) {
+		if (net_recv_pkt(nrf5_radio->iface, pkt) < 0) {
 			SYS_LOG_DBG("Packet dropped by NET stack");
 			goto out;
 		}

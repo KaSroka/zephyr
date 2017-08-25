@@ -30,33 +30,34 @@
 #include <net/net_core.h>
 
 #include <openthread/openthread.h>
-#include <openthread/diag.h>
 #include <openthread/cli.h>
-#include <openthread/tasklet.h>
 #include <openthread/platform/platform.h>
 
-
-K_TIMER_DEFINE(openthread_timer, openthread_timer_handler, NULL);
-K_WORK_DEFINE(openthread_process, openthread_process_handler);
-
 struct openthread_context {
-	otInstance *sInstance;
+	otInstance *instance;
+	otExtAddress ext_address;
 	struct net_if *iface;
 
 	u8_t mac_addr[6];
 	struct net_linkaddr ll_addr;
 };
 
+static struct openthread_context openthread_context_data; // TODO: Move before #defines at the bottom after switching to thread
+
+void openthread_process_handler(struct k_work *work)
+{
+	otTaskletsProcess(openthread_context_data.instance);
+	PlatformProcessDrivers(openthread_context_data.instance);
+}
+
+K_WORK_DEFINE(openthread_process, openthread_process_handler);
+
 void openthread_timer_handler(struct k_timer *dummy)
 {
     k_work_submit(&openthread_process);
 }
 
-void openthread_process_handler(struct k_work *work)
-{
-	otTaskletsProcess(sInstance);
-	PlatformProcessDrivers(sInstance);
-}
+K_TIMER_DEFINE(openthread_timer, openthread_timer_handler, NULL);
 
 void ot_state_changed_handler(uint32_t flags, void * p_context)
 {
@@ -64,15 +65,17 @@ void ot_state_changed_handler(uint32_t flags, void * p_context)
 }
 
 void ot_receive_handler(otMessage *aMessage, void *aContext) {
-	struct openthread_context *context = net_if_get_device(iface)->driver_data;
+	struct openthread_context *context = (struct openthread_context*)aContext;
 	uint16_t offset = 0;
 	uint16_t read_len;
 	struct net_pkt *pkt;
 	struct net_buf *prev_buf = NULL;
 
+	SYS_LOG_DBG("Data received from ot stack");
+
 	pkt = net_pkt_get_reserve_rx(0, K_NO_WAIT);
 	if (!pkt) {
-		SYS_LOG_ERR("Failed to get net pkt\n");
+		SYS_LOG_ERR("Failed to get net pkt");
 		otMessageFree(aMessage);
 		return;
 	}
@@ -82,7 +85,7 @@ void ot_receive_handler(otMessage *aMessage, void *aContext) {
 
 		pkt_buf = net_pkt_get_frag(pkt, K_NO_WAIT);
 		if (!pkt_buf) {
-			SYS_LOG_ERR("Failed to get fragment buf\n");
+			SYS_LOG_ERR("Failed to get fragment buf");
 			net_pkt_unref(pkt);
 			otMessageFree(aMessage);
 			return;
@@ -105,7 +108,7 @@ void ot_receive_handler(otMessage *aMessage, void *aContext) {
 	} while (read_len);
 
 	if (net_recv_data(context->iface, pkt) < 0) {
-		SYS_LOG_ERR("Failed recv_data\n");
+		SYS_LOG_ERR("Failed recv_data");
 		net_pkt_unref(pkt);
 	}
 
@@ -116,7 +119,12 @@ static int openthread_send(struct net_if *iface, struct net_pkt *pkt)
 {
 	struct openthread_context *context = net_if_get_device(iface)->driver_data;
 	
-	otMessage *message = otIp6NewMessage(context->otInstance, true);
+	SYS_LOG_DBG("Sending data to ot stack");
+
+	otMessage *message = otIp6NewMessage(context->instance, true);
+	if(message == NULL){
+		return -ENOMEM;
+	}
 	
 	struct net_buf *frag;
 
@@ -127,8 +135,7 @@ static int openthread_send(struct net_if *iface, struct net_pkt *pkt)
 		}
 	}
 
-	if (otIp6Send(context->otInstance, message) != OT_ERROR_NONE) {
-		otMessageFree(message);
+	if (otIp6Send(context->instance, message) != OT_ERROR_NONE) {
 		return -1; // TODO find proper error
 	}
 
@@ -142,7 +149,7 @@ static otInstance * initialize_thread(void)
     otInstance *p_instance;
 
     p_instance = otInstanceInitSingle();
-    assert(p_instance);
+    //assert(p_instance);
 
     otCliUartInit(p_instance);
 
@@ -151,10 +158,10 @@ static otInstance * initialize_thread(void)
 
     otSetStateChangedCallback(p_instance, &ot_state_changed_handler, p_instance);
 
-//    otSetChannel(p_instance, 11);
-//    otSetPanId(p_instance, 0xabcd);
-//    otInterfaceUp(p_instance);
-//    otThreadStart(p_instance);
+	otLinkSetChannel(p_instance, 17);
+	otLinkSetPanId(p_instance, 0xabcd);
+	otIp6SetEnabled(p_instance, true);
+	otThreadSetEnabled(p_instance, true);
 
     return p_instance;
 }
@@ -165,9 +172,10 @@ static int openthread_init(struct device *dev)
 
 	SYS_LOG_DBG("openthread_init");
 
-	PlatformInit();
-	context->otInstance = initialize_thread();
-	otIp6SetReceiveCallback(context->otInstance, ot_receive_handler, context);
+	PlatformInit(0, NULL);
+	context->instance = initialize_thread();
+	otIp6SetReceiveCallback(context->instance, ot_receive_handler, context);
+	k_timer_user_data_set(&openthread_timer, context);
 	k_timer_start(&openthread_timer, K_MSEC(1), K_MSEC(1));
 
 	return 0;
@@ -179,8 +187,9 @@ static void openthread_iface_init(struct net_if *iface)
 	const otExtAddress *ext_address;
 
 	context->iface = iface;
-	ext_address = otLinkGetExtendedAddress(context);
-	net_if_set_link_addr(iface, ext_addr, sizeof(*ext_addr),
+	ext_address = otLinkGetExtendedAddress(context->instance);
+	context->ext_address = *ext_address;
+	net_if_set_link_addr(iface, context->ext_address.m8, sizeof(context->ext_address),
 			     NET_LINK_ETHERNET);
 }
 
@@ -189,12 +198,10 @@ static struct net_if_api openthread_if_api = {
 	.send = openthread_send,
 };
 
-static struct openthread_context openthread_context_data;
-
 #define _OPENTHREAD_L2_LAYER DUMMY_L2
 #define _OPENTHREAD_L2_CTX_TYPE NET_L2_GET_CTX_TYPE(DUMMY_L2)
 #define _OPENTHREAD_MTU 1280
 
 NET_DEVICE_INIT(openthread, CONFIG_OPENTHREAD_DRV_NAME, openthread_init, &openthread_context_data,
-		NULL, CONFIG_KERNEL_INIT_PRIORITY_DEFAULT, &openthread_if_api,
+		NULL, 80, &openthread_if_api,
 		_OPENTHREAD_L2_LAYER, _OPENTHREAD_L2_CTX_TYPE, _OPENTHREAD_MTU);

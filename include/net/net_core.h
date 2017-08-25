@@ -80,6 +80,9 @@ enum net_verdict {
 /* Called by lower network stack when a network packet has been received */
 int net_recv_data(struct net_if *iface, struct net_pkt *pkt);
 
+/* Called by lower network stack when a network packet has been received */
+int net_recv_pkt(struct net_if *iface, struct net_pkt *pkt);
+
 /**
  * @brief Send data to network.
  *

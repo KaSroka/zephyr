@@ -33,12 +33,12 @@
 #
 # OpenThread options
 #
-menuconfig OPENTHREAD
+menuconfig OPENTHREAD_DRV
 	bool
 	prompt "OpenThread driver"
 #	select select openthread here
 
-if OPENTHREAD
+if OPENTHREAD_DRV
 
 config	OPENTHREAD_DRV_NAME
 	string "OpenThread Driver name"

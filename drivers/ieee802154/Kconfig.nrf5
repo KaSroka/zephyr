@@ -23,6 +23,7 @@ config IEEE802154_NRF5_RAW
 	bool "RAW mode"
 	select NET_L2_RAW_CHANNEL
 	select HAS_NORDIC_DRIVERS
+	select NETWORKING_WITH_15_4
 	help
 	Enable IEEE802154_CC2520 driver with RAW channel
 
