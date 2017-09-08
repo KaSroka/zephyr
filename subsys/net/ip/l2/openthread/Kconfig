@@ -33,23 +33,63 @@
 #
 # OpenThread options
 #
-menuconfig OPENTHREAD_DRV
+menuconfig NET_L2_OPENTHREAD
 	bool
-	prompt "OpenThread driver"
-#	select select openthread here
+	prompt "OpenThread L2"
+	select OPENTHREAD_PLAT
 
-if OPENTHREAD_DRV
+if NET_L2_OPENTHREAD
 
-config	OPENTHREAD_DRV_NAME
+config	OPENTHREAD_NAME
 	string "OpenThread Driver name"
 	default "openthread"
 	help
 	  This option sets the driver name
 
 config	OPENTHREAD_DEBUG
-	bool "OpenThread driver debug"
+	bool "OpenThread L2 debug"
 	default n
 	help
 	  This option enables debug support for OpenThread driver.
+	
+config OPENTHREAD_PANID
+	int
+	prompt "Default PAN ID"
+	default 43981
+	
+config OPENTHREAD_CHANNEL
+	int
+	prompt "Default Channel"
+	default 11
+
+config OPENTHREAD_COAP
+	bool
+	prompt "Built-in CoAP implementation"
+	default n
+	
+config OPENTHREAD_LOG_LEVEL
+	int
+	prompt "Default log level"
+	default 1
+	
+config OPENTHREAD_CLI
+	bool
+	prompt "Command Line Interface (CLI) support"
+	default y
+	
+config OPENTHREAD_FTD
+	bool
+	prompt "Full Thread Device (FTD) functions"
+	default y
+
+config OPENTHREAD_DIAG
+	bool
+	prompt "Diagnostic functions support"
+	default n
+	
+config OPENTHREAD_PLATFORM_FLASH_DEVICE_NAME
+	string
+	prompt "Flash device name"
+	default "NRF5_FLASH"
 
 endif

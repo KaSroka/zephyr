@@ -76,6 +76,4 @@ source "drivers/crypto/Kconfig"
 
 source "drivers/display/Kconfig"
 
-source "drivers/openthread/Kconfig"
-
 endmenu

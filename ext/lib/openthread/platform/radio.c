@@ -87,7 +87,7 @@ void ieee802154_init(struct net_if *iface)
 	SYS_LOG_DBG("");
 }
 
-int net_recv_data(struct net_if *iface, struct net_pkt *pkt)
+int net_recv_pkt(struct net_if *iface, struct net_pkt *pkt)
 {
 	(void)iface;
 
@@ -141,7 +141,7 @@ void platformRadioProcess(otInstance *aInstance) {
 		recv_frame.mLength = net_buf_frags_len(pkt->frags); // Length inc. CRC.
 		recv_frame.mChannel = 11; // TODO: get channel from packet
 		recv_frame.mLqi = 0; // TODO: get LQI from the buffer
-		recv_frame.mPower = pkt->ieee802154_rssi; // TODO: get RSSI from packet
+		recv_frame.mPower = 0;//pkt->ieee802154_rssi; // TODO: get RSSI from packet
 
 #if OPENTHREAD_ENABLE_DIAG
 		if (otPlatDiagModeGet())

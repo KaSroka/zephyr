@@ -14,7 +14,7 @@ config NET_L2_RAW_CHANNEL
 	bool
 	default n
 
-if !NET_L2_RAW_CHANNEL || OPENTHREAD_DRV
+if !NET_L2_RAW_CHANNEL
 
 config NET_INIT_PRIO
 	int

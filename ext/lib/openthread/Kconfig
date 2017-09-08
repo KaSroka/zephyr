@@ -1,48 +1,8 @@
-# Kconfig - OpenThread stack
+# Kconfig - OpenThread platform
 
-menuconfig OPENTHREAD
+config OPENTHREAD_PLAT
 	bool
-	prompt "OpenThread Support"
+	depends on NET_L2_OPENTHREAD
 	default n
 	help
-	  This option builds OpenThread platform
-	
-config OPENTHREAD_PANID
-	int
-	prompt "Default PAN ID"
-	default 43981
-	
-config OPENTHREAD_CHANNEL
-	int
-	prompt "Default Channel"
-	default 11
-
-config OPENTHREAD_COAP
-	bool
-	prompt "Built-in CoAP implementation"
-	default n
-	
-config OPENTHREAD_LOG_LEVEL
-	int
-	prompt "Default log level"
-	default 1
-	
-config OPENTHREAD_CLI
-	bool
-	prompt "Command Line Interface (CLI) support"
-	default y
-	
-config OPENTHREAD_FTD
-	bool
-	prompt "Full Thread Device (FTD) functions"
-	default y
-
-config OPENTHREAD_DIAG
-	bool
-	prompt "Diagnostic functions support"
-	default n
-	
-config OPENTHREAD_PLATFORM_FLASH_DEVICE_NAME
-	string
-	prompt "Flash device name"
-	default "NRF5_FLASH"
+	  This option enables OpenThread platform
