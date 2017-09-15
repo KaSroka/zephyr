@@ -64,7 +64,6 @@ static struct net_buf *tx_payload;
 
 static struct device *radio_dev;
 static struct ieee802154_radio_api *radio_api;
-static struct k_fifo rx_queue;
 
 static void dataInit(void)
 {
@@ -81,43 +80,6 @@ static void dataInit(void)
 	sTransmitFrame.mPsdu = tx_payload->data;
 }
 
-void ieee802154_init(struct net_if *iface)
-{
-	(void)iface;
-	SYS_LOG_DBG("");
-}
-
-int net_recv_pkt(struct net_if *iface, struct net_pkt *pkt)
-{
-	(void)iface;
-
-	SYS_LOG_DBG("Got data, pkt %p, len %d frags->len %d",
-		    pkt, pkt->len, net_pkt_frags_len(pkt));
-
-	k_fifo_put(&rx_queue, pkt);
-
-	return 0;
-}
-
-extern enum net_verdict ieee802154_radio_handle_ack(struct net_if *iface,
-						    struct net_pkt *buf)
-{
-	(void)iface;
-	(void)buf;
-	SYS_LOG_DBG("");
-
-	return NET_CONTINUE;
-}
-
-int ieee802154_radio_send(struct net_if *iface, struct net_pkt *buf)
-{
-	(void)iface;
-	(void)buf;
-	SYS_LOG_DBG("");
-
-	return -ENOTSUP;
-}
-
 void platformRadioInit(void)
 {
     dataInit();
@@ -127,37 +89,9 @@ void platformRadioInit(void)
     assert(radio_dev != NULL);
 
     radio_api = (struct ieee802154_radio_api *)radio_dev->driver_api;
-
-    k_fifo_init(&rx_queue);
 }
 
 void platformRadioProcess(otInstance *aInstance) {
-	struct net_pkt *pkt;
-
-	while ((pkt = k_fifo_get(&rx_queue, K_NO_WAIT)) != NULL)
-	{
-		otRadioFrame recv_frame;
-        recv_frame.mPsdu = net_buf_frag_last(pkt->frags)->data;
-		recv_frame.mLength = net_buf_frags_len(pkt->frags); // Length inc. CRC.
-		recv_frame.mChannel = 11; // TODO: get channel from packet
-		recv_frame.mLqi = 0; // TODO: get LQI from the buffer
-		recv_frame.mPower = 0;//pkt->ieee802154_rssi; // TODO: get RSSI from packet
-
-#if OPENTHREAD_ENABLE_DIAG
-		if (otPlatDiagModeGet())
-		{
-			otPlatDiagRadioReceiveDone(aInstance, &recv_frame, OT_ERROR_NONE);
-		}
-		else
-#endif
-		{
-			otPlatRadioReceiveDone(aInstance, &recv_frame,
-					OT_ERROR_NONE);
-		}
-
-		net_pkt_unref(pkt);
-	}
-
 	if (sState == OT_RADIO_STATE_TRANSMIT)
 	{
 		otError result = OT_ERROR_NONE;

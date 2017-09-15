@@ -40,6 +40,11 @@ menuconfig NET_L2_OPENTHREAD
 
 if NET_L2_OPENTHREAD
 
+config OPENTHREAD_PKT_LIST_SIZE
+	int
+	prompt "List size for Ip6 packet buffering"
+	default 10
+
 config	OPENTHREAD_NAME
 	string "OpenThread Driver name"
 	default "openthread"

@@ -23,23 +23,24 @@
 
 #include <stdbool.h>
 #include <errno.h>
-#include <stddef.h>
+#include <init.h>
 #include <misc/util.h>
 #include <net/net_pkt.h>
 #include <net/net_if.h>
 #include <net/net_core.h>
+#include <stddef.h>
 
 #include <openthread/openthread.h>
 #include <openthread/cli.h>
 #include <openthread/platform/platform.h>
 
 #define OT_STACK_SIZE (1024 * 8)
-#define OT_PRIOIRTY 5
+#define OT_PRIORITY 5
 
 K_MUTEX_DEFINE(ot_mutex);
 K_THREAD_STACK_DEFINE(ot_stack_area, OT_STACK_SIZE);
 struct k_thread ot_thread_data;
-k_tid ot_tid;
+k_tid_t ot_tid;
 
 struct openthread_context {
 	otInstance *instance;
@@ -51,7 +52,7 @@ struct openthread_context {
 
 struct pkt_list_elem {
 	struct net_pkt *pkt;
-}
+};
 
 static u16_t pkt_list_in_idx;
 static u16_t pkt_list_out_idx;
@@ -78,41 +79,47 @@ static inline int pkt_list_add(struct net_pkt *pkt)
 		pkt_list_full = 1;
 	}
 
-	packets[pkt_list_in_idx].pkt = pkt;
+	pkt_list[pkt_list_in_idx].pkt = pkt;
 	pkt_list_in_idx = i_idx;
 
 	return 0;
 }
 
 static inline struct net_pkt* pkt_list_peek(void) {
-	if ((in_pkt == out_pkt) && (!pkt_list_full)) {
+	if ((pkt_list_in_idx == pkt_list_out_idx) && (!pkt_list_full)) {
 		return NULL;
 	}
-	return packets[out_pkt].pkt;
+	return pkt_list[pkt_list_out_idx].pkt;
 }
 
 static inline void pkt_list_remove_last(void) {
-	if ((in_pkt == out_pkt) && (!pkt_list_full)) {
+	if ((pkt_list_in_idx == pkt_list_out_idx) && (!pkt_list_full)) {
 		return;
 	}
 
-	out_pkt++;
+	pkt_list_out_idx++;
 
-	if (out_pkt == CONFIG_OPENTHREAD_PKT_LIST_SIZE) {
-		out_pkt = 0;
+	if (pkt_list_out_idx == CONFIG_OPENTHREAD_PKT_LIST_SIZE) {
+		pkt_list_out_idx = 0;
 	}
 
 	pkt_list_full = 0;
 }
 
+static inline int pkt_list_is_full(void) {
+	return pkt_list_full;
+}
+
 static void openthread_process(void * arg1, void * arg2, void * arg3)
 {
-	while(1){
+	while (1) {
 		k_mutex_lock(&ot_mutex, K_FOREVER);
 
 		SYS_LOG_DBG("OT mutex locked");
 
-		otTaskletsProcess(openthread_context.instance);
+		while (otTaskletsArePending(openthread_context.instance)) {
+			otTaskletsProcess(openthread_context.instance);
+		}
 		PlatformProcessDrivers(openthread_context.instance);
 
 		k_mutex_unlock(&ot_mutex);
@@ -131,9 +138,6 @@ void ot_state_changed_handler(uint32_t flags, void * p_context)
 }
 
 void ot_receive_handler(otMessage *aMessage, void *aContext) {
-
-	// work in progress - add packets to list, more logs
-
 	struct openthread_context *context = (struct openthread_context*)aContext;
 	uint16_t offset = 0;
 	uint16_t read_len;
@@ -144,7 +148,7 @@ void ot_receive_handler(otMessage *aMessage, void *aContext) {
 
 	pkt = net_pkt_get_reserve_rx(0, K_NO_WAIT);
 	if (!pkt) {
-		SYS_LOG_ERR("Failed to get net pkt");
+		SYS_LOG_ERR("Failed to reserve net pkt");
 		otMessageFree(aMessage);
 		return;
 	}
@@ -176,20 +180,55 @@ void ot_receive_handler(otMessage *aMessage, void *aContext) {
 
 	} while (read_len);
 
-	if (net_recv_data(context->iface, pkt) < 0) {
-		SYS_LOG_ERR("Failed recv_data");
-		net_pkt_unref(pkt);
+	SYS_LOG_DBG("Injecting Ip6 packet to Zephyr net stack");
+
+	if (!pkt_list_is_full()) {
+		if (net_recv_data(context->iface, pkt) < 0) {
+			SYS_LOG_ERR("Failed recv_data");
+			net_pkt_unref(pkt);
+			otMessageFree(aMessage);
+			return;
+		}
+
+		pkt_list_add(pkt);
+	} else {
+		SYS_LOG_INF("Pacet list is full");
 	}
+
+	otMessageFree(aMessage);
 }
 
 static enum net_verdict openthread_recv(struct net_if *iface, struct net_pkt *pkt)
 {
-	// work in progress - unimplemented
 	if (pkt_list_peek() == pkt) {
 		pkt_list_remove_last();
-		SYS_LOG_DBG("Got reinjected Ip6 packet, sending to upper layers");
+		SYS_LOG_DBG("Got injected Ip6 packet, sending to upper layers");
 		return NET_CONTINUE;
 	}
+
+	SYS_LOG_DBG("Got 15.4 packet, sending to OT");
+
+	otRadioFrame recv_frame;
+	recv_frame.mPsdu = net_buf_frag_last(pkt->frags)->data;
+	recv_frame.mLength = net_buf_frags_len(pkt->frags); // Length inc. CRC.
+	recv_frame.mChannel = 11; // TODO: get channel from packet
+	recv_frame.mLqi = 0; // TODO: get LQI from the buffer
+	recv_frame.mPower = 0;//pkt->ieee802154_rssi; // TODO: get RSSI from packet
+
+#if OPENTHREAD_ENABLE_DIAG
+	if (otPlatDiagModeGet())
+	{
+		otPlatDiagRadioReceiveDone(openthread_context.instance, &recv_frame, OT_ERROR_NONE);
+	}
+	else
+#endif
+	{
+		otPlatRadioReceiveDone(openthread_context.instance, &recv_frame, OT_ERROR_NONE);
+	}
+
+	net_pkt_unref(pkt);
+
+	return NET_OK;
 
 }
 
@@ -203,7 +242,7 @@ static enum net_verdict openthread_send(struct net_if *iface, struct net_pkt *pk
 
 	otMessage *message = otIp6NewMessage(openthread_context.instance, true);
 	if (message == NULL) {
-		return NET_DROP;
+		goto exit;
 	}
 	
 	struct net_buf *frag;
@@ -212,14 +251,15 @@ static enum net_verdict openthread_send(struct net_if *iface, struct net_pkt *pk
 		if (otMessageAppend(message, frag->data, frag->len) != OT_ERROR_NONE) {
 			SYS_LOG_ERR("Error while appending to otMessage");
 			otMessageFree(message);
-			return NET_DROP;
+			goto exit;
 		}
 	}
 
 	if (otIp6Send(openthread_context.instance, message) != OT_ERROR_NONE) {
-		SYS_LOG_ERROR("Error while trying to forward Ip6 packet to OT stack");
-		return NET_DROP;
+		goto exit;
 	}
+
+exit:
 
 	k_mutex_unlock(&ot_mutex);
 
@@ -228,6 +268,14 @@ static enum net_verdict openthread_send(struct net_if *iface, struct net_pkt *pk
 	net_pkt_unref(pkt);
 
 	return NET_DROP;
+}
+
+static inline u16_t openthread_reserve(struct net_if *iface, void *unused)
+{
+	ARG_UNUSED(iface);
+	ARG_UNUSED(unused);
+
+	return 0;
 }
 
 static int openthread_init(struct device *unused)
@@ -243,7 +291,7 @@ static int openthread_init(struct device *unused)
     SYS_LOG_INF("OpenThread version: %s", otGetVersionString());
     SYS_LOG_INF("Network name:   %s", otThreadGetNetworkName(openthread_context.instance));
 
-    otSetStateChangedCallback(p_instance, &ot_state_changed_handler, openthread_context.instance);
+    otSetStateChangedCallback(openthread_context.instance, &ot_state_changed_handler, openthread_context.instance);
 
 	otLinkSetChannel(openthread_context.instance, CONFIG_OPENTHREAD_CHANNEL);
 	otLinkSetPanId(openthread_context.instance, CONFIG_OPENTHREAD_PANID);
@@ -253,11 +301,11 @@ static int openthread_init(struct device *unused)
 	
 	otIp6SetReceiveCallback(openthread_context.instance, ot_receive_handler, NULL);
 
-	k_tid_t my_tid = k_thread_create(&my_thread_data, my_stack_area,
-		K_THREAD_STACK_SIZEOF(my_stack_area),
+	ot_tid = k_thread_create(&ot_thread_data, ot_stack_area,
+		K_THREAD_STACK_SIZEOF(ot_stack_area),
 		openthread_process,
 		NULL, NULL, NULL,
-		MY_PRIORITY, 0, K_NO_WAIT);
+		OT_PRIORITY, 0, K_NO_WAIT);
 
 	return 0;
 }
@@ -277,4 +325,4 @@ static void openthread_iface_init(struct net_if *iface)
 
 SYS_INIT(openthread_init, POST_KERNEL, 80);
 
-NET_L2_INIT(OT_L2, openthread_recv, openthread_send, openthread_reserve, openthread_enable);
+NET_L2_INIT(OPENTHREAD_L2, openthread_recv, openthread_send, openthread_reserve, NULL);
