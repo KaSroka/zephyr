@@ -96,7 +96,7 @@ static void nrf5_rx_thread(void *arg1, void *arg2, void *arg3)
 		 * The last 2 bytes contain LQI or FCS, depending if
 		 * automatic CRC handling is enabled or not, respectively.
 		 */
-#if defined(CONFIG_IEEE802154_NRF5_RAW)
+#if defined(CONFIG_IEEE802154_NRF5_RAW) || defined(CONFIG_NET_L2_OPENTHREAD)
 		pkt_len = nrf5_radio->rx_psdu[0];
 #else
 		pkt_len = nrf5_radio->rx_psdu[0] -  NRF5_FCS_LENGTH;
@@ -106,6 +106,7 @@ static void nrf5_rx_thread(void *arg1, void *arg2, void *arg3)
 		memcpy(frag->data, nrf5_radio->rx_psdu + 1, pkt_len);
 		net_buf_add(frag, pkt_len);
 
+		SYS_LOG_DBG("Freeing 15.4 buffer");
 		nrf_drv_radio802154_buffer_free(nrf5_radio->rx_psdu);
 
 		ack_result = ieee802154_radio_handle_ack(nrf5_radio->iface,
@@ -369,7 +370,7 @@ void nrf_drv_radio802154_received(u8_t *p_data, s8_t power, s8_t lqi)
 	nrf5_data.rx_psdu = p_data;
 	nrf5_data.rssi = power;
 	nrf5_data.lqi = lqi;
-
+    SYS_LOG_DBG("Frame recvd");
 	k_sem_give(&nrf5_data.rx_wait);
 }
 

@@ -38,11 +38,6 @@
 #define OT_STACK_SIZE (1024 * 8)
 #define OT_PRIORITY 5
 
-K_MUTEX_DEFINE(ot_mutex);
-K_THREAD_STACK_DEFINE(ot_stack_area, OT_STACK_SIZE);
-struct k_thread ot_thread_data;
-k_tid_t ot_tid;
-
 struct openthread_context {
 	otInstance *instance;
 	struct net_if *iface;
@@ -52,12 +47,58 @@ struct pkt_list_elem {
 	struct net_pkt *pkt;
 };
 
+K_MUTEX_DEFINE(ot_mutex);
+
+K_THREAD_STACK_DEFINE(ot_stack_area, OT_STACK_SIZE);
+static struct k_thread ot_thread_data;
+static k_tid_t ot_tid;
+
+static struct net_mgmt_event_callback mgmt6_cb;
+
+static struct openthread_context context;
+
 static u16_t pkt_list_in_idx;
 static u16_t pkt_list_out_idx;
 static u8_t pkt_list_full;
 static struct pkt_list_elem pkt_list[CONFIG_OPENTHREAD_PKT_LIST_SIZE];
 
-static struct openthread_context context;
+static void hexdump(const char *str, const u8_t *packet, size_t length)
+{
+	int n = 0;
+
+	char buff[100] = "";
+	char buff2[100] = "";
+
+	if (!length) {
+		SYS_LOG_DBG("%s zero-length packet", str);
+		return;
+	}
+
+	while (length--) {
+		if (n % 16 == 0) {
+			sprintf(buff2, "%s %08X ", str, n);
+			strcat(buff, buff2);
+		}
+
+		sprintf(buff2, "%02X ", *packet++);
+		strcat(buff, buff2);
+
+		n++;
+		if (n % 8 == 0) {
+			if (n % 16 == 0) {
+				SYS_LOG_DBG("%s", buff);
+				buff[0] = '\0';
+			} else {
+				strcat(buff, " ");
+			}
+		}
+	}
+
+	if (n % 16) {
+		SYS_LOG_DBG("%s", buff);
+		buff[0] = '\0';
+	}
+}
 
 static inline int pkt_list_add(struct net_pkt *pkt)
 {
@@ -124,6 +165,116 @@ static void openthread_process(void * arg1, void * arg2, void * arg3)
 	}
 }
 
+static void add_ipv6_addr(void)
+{
+	const otNetifAddress *address;
+	for (address = otIp6GetUnicastAddresses(context.instance); address; address = address->mNext) {
+#if defined(CONFIG_OPENTHREAD_DEBUG)
+		char buf[NET_IPV6_ADDR_LEN];
+		SYS_LOG_DBG("Adding %s", net_addr_ntop(AF_INET6, (struct in6_addr *)(&address->mAddress), buf, sizeof(buf)));
+#endif
+		net_if_ipv6_addr_add(context.iface, (struct in6_addr *)(&address->mAddress), NET_ADDR_ANY, 0);
+	}
+}
+
+static void add_ipv6_maddr(void)
+{
+	const otNetifMulticastAddress *maddress;
+	for (maddress = otIp6GetMulticastAddresses(context.instance); maddress; maddress = maddress->mNext) {
+#if defined(CONFIG_OPENTHREAD_DEBUG)
+		char buf[NET_IPV6_ADDR_LEN];
+		SYS_LOG_DBG("Adding multicast %s", net_addr_ntop(AF_INET6, (struct in6_addr *)(&maddress->mAddress), buf, sizeof(buf)));
+#endif
+		net_if_ipv6_maddr_add(context.iface, (struct in6_addr *)(&maddress->mAddress));
+	}
+}
+
+static void add_ipv6_prefix(void)
+{
+	otNetworkDataIterator *iterator = OT_NETWORK_DATA_ITERATOR_INIT;
+	otBorderRouterConfig config;
+	
+	while (otNetDataGetNextOnMeshPrefix(context.instance, iterator, &config) == OT_ERROR_NONE) {
+#if defined(CONFIG_OPENTHREAD_DEBUG)
+		char buf[NET_IPV6_ADDR_LEN];
+		SYS_LOG_DBG("Adding prefix %s/%d", net_addr_ntop(AF_INET6, (struct in6_addr *)(&config.mPrefix.mPrefix), buf, sizeof(buf)), config.mPrefix.mLength);
+#endif
+		net_if_ipv6_prefix_add(context.iface, (struct in6_addr *)(&config.mPrefix.mPrefix), config.mPrefix.mLength, 0);
+	}
+
+}
+
+static void rm_ipv6_addr(void)
+{
+	int i;
+	
+	for (i = 0; i < NET_IF_MAX_IPV6_ADDR; i++) {
+		if (!context.iface->ipv6.unicast[i].is_used) {
+			continue;
+		}
+
+		const otNetifAddress *address;
+		bool used = false;
+		for (address = otIp6GetUnicastAddresses(context.instance); address; address = address->mNext) {
+			if (net_ipv6_addr_cmp((struct in6_addr *)(&address->mAddress),
+				&context.iface->ipv6.unicast[i].address.in6_addr)) {
+				used = true;
+				break;
+			}
+		}
+		if (!used) {
+#if defined(CONFIG_OPENTHREAD_DEBUG)
+			char buf[NET_IPV6_ADDR_LEN];
+			SYS_LOG_DBG("Removing %s", net_addr_ntop(AF_INET6, (struct in6_addr *)(&address->mAddress), buf, sizeof(buf)));
+#endif
+			net_if_ipv6_addr_rm(context.iface, (struct in6_addr *)(&address->mAddress));
+		}
+	}
+}
+
+static void rm_ipv6_maddr(void)
+{
+	int i;
+
+	for (i = 0; i < NET_IF_MAX_IPV6_MADDR; i++) {
+		if (!context.iface->ipv6.mcast[i].is_used) {
+			continue;
+		}
+
+		const otNetifMulticastAddress *maddress;
+		bool used = false;
+		for (maddress = otIp6GetMulticastAddresses(context.instance); maddress; maddress = maddress->mNext) {
+			if (net_ipv6_addr_cmp((struct in6_addr *)(&maddress->mAddress),
+				&context.iface->ipv6.mcast[i].address.in6_addr)) {
+				used = true;
+				break;
+			}
+		}
+		if (!used) {
+#if defined(CONFIG_OPENTHREAD_DEBUG)
+			char buf[NET_IPV6_ADDR_LEN];
+			SYS_LOG_DBG("Removing multicast %s", net_addr_ntop(AF_INET6, (struct in6_addr *)(&maddress->mAddress), buf, sizeof(buf)));
+#endif
+			net_if_ipv6_maddr_rm(context.iface, (struct in6_addr *)(&maddress->mAddress));
+		}
+	}
+}
+
+static void ipv6_event_handler(struct net_mgmt_event_callback *cb,
+	u32_t mgmt_event, struct net_if *iface)
+{
+	if (mgmt_event == NET_EVENT_IPV6_ADDR_ADD) {
+		SYS_LOG_DBG("Added address event");
+		/* save the last added IP address for this interface */
+		// for (i = NET_IF_MAX_IPV6_ADDR - 1; i >= 0; i--) {
+		// 	if (iface->ipv6.unicast[i].is_used) {
+		// 	memcpy(&laddr,
+		// 			&iface->ipv6.unicast[i].address.in6_addr,
+		// 			sizeof(laddr));
+		// 	}
+		// }
+	}
+}
 
 void ot_state_changed_handler(uint32_t flags, void * p_context)
 {
@@ -131,48 +282,20 @@ void ot_state_changed_handler(uint32_t flags, void * p_context)
 
 	if (flags & OT_CHANGED_IP6_ADDRESS_ADDED) {
 		SYS_LOG_DBG("Ipv6 address added");
-		const otNetifAddress *address;
-		for (address = otIp6GetUnicastAddresses(context.instance); address; address = address->mNext) {
-			static char buf[NET_IPV6_ADDR_LEN];
-			net_addr_ntop(AF_INET6, (struct in6_addr *)(&address->mAddress), (char *)buf, sizeof(buf));
-			SYS_LOG_DBG("Adding %s", buf);
-			net_if_ipv6_addr_add(context.iface, (struct in6_addr *)(&address->mAddress), NET_ADDR_ANY, 0);
-		}
-		const otNetifMulticastAddress *maddress;
-		for (maddress = otIp6GetMulticastAddresses(context.instance); maddress; maddress = maddress->mNext) {
-			net_if_ipv6_maddr_add(context.iface, (struct in6_addr *)(&maddress->mAddress));
-		}
+		add_ipv6_prefix();
+		add_ipv6_addr();
+		add_ipv6_maddr();
 	}	
 
 	if (flags & OT_CHANGED_IP6_ADDRESS_REMOVED) {
 		SYS_LOG_DBG("Ipv6 address removed");
-		int i;
-	
-		for (i = 0; i < NET_IF_MAX_IPV6_ADDR; i++) {
-			if (!context.iface->ipv6.unicast[i].is_used) {
-				continue;
-			}
-
-			const otNetifAddress *address;
-			bool used = false;
-			for (address = otIp6GetUnicastAddresses(context.instance); address; address = address->mNext) {
-				if (net_ipv6_addr_cmp((struct in6_addr *)(&address->mAddress),
-					&context.iface->ipv6.unicast[i].address.in6_addr)) {
-					used = true;
-					break;
-				}
-			}
-			if (!used) {
-				static char buf[NET_IPV6_ADDR_LEN];
-				net_addr_ntop(AF_INET6, (struct in6_addr *)(&address->mAddress), (char *)buf, sizeof(buf));
-				SYS_LOG_DBG("Removing %s", buf);
-				net_if_ipv6_addr_rm(context.iface, (struct in6_addr *)(&address->mAddress));
-			}
-		}
+		rm_ipv6_addr();
+		rm_ipv6_maddr();
 	}
 }
 
-void ot_receive_handler(otMessage *aMessage, void *aContext) {
+void ot_receive_handler(otMessage *aMessage, void *aContext)
+{
 	uint16_t offset = 0;
 	uint16_t read_len;
 	struct net_pkt *pkt;
@@ -247,6 +370,8 @@ static enum net_verdict openthread_recv(struct net_if *iface, struct net_pkt *pk
 	recv_frame.mLqi = 0; // TODO: get LQI from the buffer
 	recv_frame.mPower = 0;//pkt->ieee802154_rssi; // TODO: get RSSI from packet
 
+	hexdump("otRadioFrame mPsdu dump", recv_frame.mPsdu, recv_frame.mLength);
+
 #if OPENTHREAD_ENABLE_DIAG
 	if (otPlatDiagModeGet())
 	{
@@ -255,7 +380,9 @@ static enum net_verdict openthread_recv(struct net_if *iface, struct net_pkt *pk
 	else
 #endif
 	{
+		k_mutex_lock(&ot_mutex, K_FOREVER);
 		otPlatRadioReceiveDone(context.instance, &recv_frame, OT_ERROR_NONE);
+		k_mutex_unlock(&ot_mutex);
 	}
 
 	net_pkt_unref(pkt);
@@ -330,8 +457,10 @@ static int openthread_init(struct device *unused)
 	otIp6SetEnabled(context.instance, true);
 	otThreadSetEnabled(context.instance, true);
 
-	
-	otIp6SetReceiveCallback(context.instance, ot_receive_handler, NULL);
+	//otIp6SetReceiveCallback(context.instance, ot_receive_handler, NULL);
+
+	net_mgmt_init_event_callback(&mgmt6_cb, ipv6_event_handler, NET_EVENT_IPV6_ADDR_ADD);
+	net_mgmt_add_event_callback(&mgmt6_cb);
 
 	ot_tid = k_thread_create(&ot_thread_data, ot_stack_area,
 		K_THREAD_STACK_SIZEOF(ot_stack_area),
@@ -341,19 +470,6 @@ static int openthread_init(struct device *unused)
 
 	return 0;
 }
-#if 0
-static void openthread_iface_init(struct net_if *iface)
-{
-	struct openthread_context *context = net_if_get_device(iface)->driver_data;
-	const otExtAddress *ext_address;
-
-	context->iface = iface;
-	ext_address = otLinkGetExtendedAddress(context->instance);
-	context->ext_address = *ext_address;
-	net_if_set_link_addr(iface, context->ext_address.m8, sizeof(context->ext_address),
-			     NET_LINK_ETHERNET);
-}
-#endif
 
 SYS_INIT(openthread_init, POST_KERNEL, 80);
 
