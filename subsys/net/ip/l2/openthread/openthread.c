@@ -20,7 +20,7 @@
 #include <net/net_if.h>
 #include <net/net_core.h>
 #include <net/net_mgmt.h>
-#include <net/openthread_l2.h>
+#include <net/openthread.h>
 #include <stddef.h>
 
 #include <openthread/openthread.h>

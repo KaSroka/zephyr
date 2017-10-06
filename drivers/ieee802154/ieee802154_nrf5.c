@@ -39,6 +39,8 @@ struct nrf5_802154_config {
 
 static struct nrf5_802154_data nrf5_data;
 
+#define ACK_TIMEOUT K_MSEC(10)
+
 /* Convenience defines for RADIO */
 #define NRF5_802154_DATA(dev) \
 	((struct nrf5_802154_data * const)(dev)->driver_data)
@@ -242,8 +244,8 @@ static int nrf5_tx(struct device *dev,
 	nrf5_radio->tx_success = false;
 	nrf5_radio->tx_psdu[0] = payload_len + NRF5_FCS_LENGTH;
 
-	// Reset semaphore in case ACK was received after timeout
-	k_sem_take(&nrf5_radio->tx_wait, K_NO_WAIT);
+	/* Reset semaphore in case ACK was received after timeout */
+	k_sem_reset(&nrf5_radio->tx_wait);
 
 	memcpy(nrf5_radio->tx_psdu + 1, payload, payload_len);
 
@@ -258,15 +260,17 @@ static int nrf5_tx(struct device *dev,
 		    nrf5_radio->channel,
 		    nrf5_radio->txpower);
 
-	if(k_sem_take(&nrf5_radio->tx_wait, K_MSEC(7)) == 0) {
-		SYS_LOG_DBG("Result: %d", nrf5_data.tx_success);
-		
-		return nrf5_radio->tx_success ? 0 : -EBUSY;
-	} else {
-		SYS_LOG_INF("ACK not received");
+	/* Wait for ack to be received */
+	if (k_sem_take(&nrf5_radio->tx_wait, ACK_TIMEOUT)) {
+		SYS_LOG_DBG("ACK not received");
 		nrf_drv_radio802154_receive(nrf5_radio->channel, true);
+
 		return -EIO;
 	}
+
+	SYS_LOG_DBG("Result: %d", nrf5_data.tx_success);
+
+	return nrf5_radio->tx_success ? 0 : -EBUSY;
 }
 
 static int nrf5_start(struct device *dev)

@@ -7,7 +7,7 @@
 #include <kernel.h>
 
 #include <net/net_pkt.h>
-#include <net/openthread_l2.h>
+#include <net/openthread.h>
 
 #include <openthread/openthread.h>
 

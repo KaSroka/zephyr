@@ -93,7 +93,7 @@ NET_L2_DECLARE_PUBLIC(OFFLOAD_IP);
 #endif /* CONFIG_NET_OFFLOAD */
 
 #ifdef CONFIG_NET_L2_OPENTHREAD
-#include <net/openthread_l2.h>
+#include <net/openthread.h>
 #define OPENTHREAD_L2		OPENTHREAD
 #define OPENTHREAD_L2_CTX_TYPE	struct openthread_context
 NET_L2_DECLARE_PUBLIC(OPENTHREAD_L2);
