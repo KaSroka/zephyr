@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017 Nordic Semiconductor ASA
+ * Copyright (c) 2018 Nordic Semiconductor ASA
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -85,7 +85,7 @@ void platformRadioProcess(otInstance *aInstance) {
         radio_api->set_channel(radio_dev, sTransmitFrame.mChannel);
         radio_api->set_txpower(radio_dev, sTransmitFrame.mPower);
 
-		if (radio_api->tx(radio_dev, tx_pkt, tx_payload) == -EBUSY) {
+		if (radio_api->tx(radio_dev, tx_pkt, tx_payload)) {
 			result = OT_ERROR_CHANNEL_ACCESS_FAILURE;
 		}
 
@@ -210,7 +210,7 @@ otError otPlatRadioTransmit(otInstance *aInstance, otRadioFrame *aPacket)
     ARG_UNUSED(aInstance);
     ARG_UNUSED(aPacket);
 
-    __ASSERT_NO_MSG(aPacket == sTransmitFrame);
+    __ASSERT_NO_MSG(aPacket == &sTransmitFrame);
 
     if (sState == OT_RADIO_STATE_RECEIVE)
     {

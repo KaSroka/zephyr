@@ -21,6 +21,10 @@
 #include <net/net_if.h>
 #include <net/net_pkt.h>
 
+#if defined(CONFIG_NET_L2_OPENTHREAD)
+#include <net/openthread.h>
+#endif
+
 #include <misc/byteorder.h>
 #include <string.h>
 #include <random/rand32.h>

@@ -85,6 +85,8 @@ source "subsys/net/ip/Kconfig"
 
 source "subsys/net/lib/Kconfig"
 
+source "subsys/net//lib/openthread/Kconfig"
+
 endif
 
 endmenu

@@ -30,6 +30,8 @@ struct openthread_context {
 	struct pkt_list_elem pkt_list[CONFIG_OPENTHREAD_PKT_LIST_SIZE];
 };
 
+#define OPENTHREAD_L2_CTX_TYPE struct openthread_context
+
 #ifdef __cplusplus
 }
 #endif
